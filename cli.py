@@ -4191,8 +4191,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
         model_short = model_name.split("/")[-1] if "/" in model_name else model_name
         if model_short.endswith(".gguf"):
             model_short = model_short[:-5]
-        if len(model_short) > 26:
-            model_short = f"{model_short[:23]}..."
+        if len(model_short) > 40:
+            model_short = f"{model_short[:37]}..."
 
         elapsed_seconds = max(0.0, (datetime.now() - self.session_start).total_seconds())
         snapshot = {
@@ -5865,8 +5865,8 @@ class HermesCLI(CLIAgentSetupMixin, CLICommandsMixin):
 
         # Format model name (shorten if needed)
         model_short = self.model.split("/")[-1] if "/" in self.model else self.model
-        if len(model_short) > 30:
-            model_short = model_short[:27] + "..."
+        if len(model_short) > 40:
+            model_short = model_short[:37] + "..."
 
         # Get API status indicator
         if self.api_key:

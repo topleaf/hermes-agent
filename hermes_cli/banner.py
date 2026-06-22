@@ -623,8 +623,8 @@ def build_welcome_banner(console: "Console", model: str, cwd: str,
     model_short = model.split("/")[-1] if "/" in model else model
     if model_short.endswith(".gguf"):
         model_short = model_short[:-5]
-    if len(model_short) > 28:
-        model_short = model_short[:25] + "..."
+    if len(model_short) > 40:
+        model_short = model_short[:37] + "..."
     ctx_str = f" [dim {dim}]·[/] [dim {dim}]{_format_context_length(context_length)} context[/]" if context_length else ""
     left_lines.append(f"[{accent}]{model_short}[/]{ctx_str} [dim {dim}]·[/] [dim {dim}]Nous Research[/]")
 

@@ -23,13 +23,23 @@ import express from 'express';
 import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import path from 'path';
+import https from 'https';
 import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { randomBytes, createHash } from 'crypto';
 import { execSync } from 'child_process';
 import { tmpdir } from 'os';
 import qrcode from 'qrcode-terminal';
+import qrcodeImage from 'qrcode';
 import { matchesAllowedUser, parseAllowedUsers } from './allowlist.js';
+import net from 'net';
+
+// Node 20+ enables Happy Eyeballs (autoSelectFamily) by default, which
+// tries IPv6 first.  WhatsApp publishes AAAA records but IPv6 is broken
+// behind the GFW — the attempt fails fast (~300 ms) and Node surfaces it
+// as ETIMEDOUT instead of falling back to IPv4.  Disabling this globally
+// forces plain IPv4 lookups, which route correctly through the proxy.
+net.setDefaultAutoSelectFamily(false);
 
 // Parse CLI args
 const args = process.argv.slice(2);
@@ -71,6 +81,29 @@ try {
 const PAIR_ONLY = args.includes('--pair-only');
 const WHATSAPP_MODE = getArg('mode', process.env.WHATSAPP_MODE || 'self-chat'); // "bot" or "self-chat"
 const ALLOWED_USERS = parseAllowedUsers(process.env.WHATSAPP_ALLOWED_USERS || '');
+// Bind outgoing connections to a specific local IP (e.g. VPN/WiFi interface).
+// Forces WebSocket and HTTPS traffic through that interface.  Set via
+// --local-address CLI arg or WHATSAPP_LOCAL_ADDRESS env var.  Critical for
+// GFW environments where the system default route is blocked.
+const LOCAL_ADDRESS = getArg('local-address', process.env.WHATSAPP_LOCAL_ADDRESS || '');
+const wsAgent = LOCAL_ADDRESS
+  ? new https.Agent({ localAddress: LOCAL_ADDRESS, keepAlive: true })
+  : undefined;
+if (LOCAL_ADDRESS) {
+  console.log(`🌐 Binding outgoing connections to ${LOCAL_ADDRESS}`);
+  // Also bind Node's built-in fetch (undici) so Baileys media upload/download
+  // goes through the same interface (e.g. WiFi with VPN) instead of the
+  // system default route which may be blocked by the GFW.
+  try {
+    const { Agent: UndiciAgent, setGlobalDispatcher } = await import('undici');
+    setGlobalDispatcher(new UndiciAgent({
+      connect: { localAddress: LOCAL_ADDRESS },
+    }));
+    console.log(`🌐 undici fetch also bound to ${LOCAL_ADDRESS}`);
+  } catch (e) {
+    console.warn(`⚠️  Failed to set undici global dispatcher: ${e.message}`);
+  }
+}
 const DEFAULT_REPLY_PREFIX = '⚕ *Hermes Agent*\n────────────\n';
 const REPLY_PREFIX = process.env.WHATSAPP_REPLY_PREFIX === undefined
   ? DEFAULT_REPLY_PREFIX
@@ -209,6 +242,7 @@ async function startSocket() {
     browser: ['Hermes Agent', 'Chrome', '120.0'],
     syncFullHistory: false,
     markOnlineOnConnect: false,
+    agent: wsAgent,
     // Required for Baileys 7.x: without this, incoming messages that need
     // E2EE session re-establishment are silently dropped (msg.message === null)
     getMessage: async (key) => {
@@ -226,6 +260,15 @@ async function startSocket() {
     if (qr) {
       console.log('\n📱 Scan this QR code with WhatsApp on your phone:\n');
       qrcode.generate(qr, { small: true });
+      // Also write a PNG file for users who prefer scanning from the screen.
+      // Useful when terminal rendering is broken (RDP / SSH client font /
+      // small panes) — the PNG is a guaranteed-readable fallback.
+      try {
+        const qrPath = path.join(path.dirname(fileURLToPath(import.meta.url)), 'qr.png');
+        qrcodeImage.toFile(qrPath, qr, { scale: 8 }, (err) => {
+          if (!err) console.log(`📷 QR code also saved to ${qrPath}`);
+        });
+      } catch {}
       console.log('\nWaiting for scan...\n');
     }
 

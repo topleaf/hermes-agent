@@ -1411,6 +1411,20 @@ def _apply_yaml_config(yaml_cfg: dict, whatsapp_cfg: dict) -> dict | None:
         if isinstance(gaf, list):
             gaf = ",".join(str(v) for v in gaf)
         os.environ["WHATSAPP_GROUP_ALLOWED_USERS"] = str(gaf)
+    # Local additions: enabled flag + home channel.  Lifted from the
+    # legacy gateway/config.py block so config.yaml can drive WhatsApp
+    # without manually exporting env vars at every shell start.
+    if "enabled" in whatsapp_cfg and not os.getenv("WHATSAPP_ENABLED"):
+        os.environ["WHATSAPP_ENABLED"] = str(whatsapp_cfg["enabled"]).lower()
+    home_channel = whatsapp_cfg.get("home_channel")
+    if home_channel is not None and not os.getenv("WHATSAPP_HOME_CHANNEL"):
+        os.environ["WHATSAPP_HOME_CHANNEL"] = str(home_channel)
+    home_channel_name = whatsapp_cfg.get("home_channel_name")
+    if home_channel_name is not None and not os.getenv("WHATSAPP_HOME_CHANNEL_NAME"):
+        os.environ["WHATSAPP_HOME_CHANNEL_NAME"] = str(home_channel_name)
+    home_channel_thread = whatsapp_cfg.get("home_channel_thread_id")
+    if home_channel_thread is not None and not os.getenv("WHATSAPP_HOME_CHANNEL_THREAD_ID"):
+        os.environ["WHATSAPP_HOME_CHANNEL_THREAD_ID"] = str(home_channel_thread)
     return None
 
 
